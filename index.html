@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AxoDodge - Jeu en Réalité Augmentée</title>
+    
+    <!-- Polices -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'axo-dark': '#292D57',
+                        'axo-light': '#70D7D1',
+                        'axo-gradient-from': '#6C7CEA',
+                        'axo-dark-bg': '#1a1e40',
+                    },
+                    fontFamily: {
+                        'poppins': ['Poppins', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- CSS personnalisé -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+</head>
+<body class="bg-axo-dark-bg text-white font-poppins overflow-hidden m-0 p-0 select-none">
+    <!-- Conteneur principal -->
+    <div id="game-container" class="relative w-full h-screen flex flex-col items-center justify-center">
+        
+        <!-- Écran d'introduction -->
+        <div id="intro-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-axo-dark-bg">
+            <div class="text-center p-6 max-w-2xl">
+                <h1 class="text-6xl font-extrabold mb-6 bg-gradient-to-r from-axo-gradient-from to-axo-light bg-clip-text text-transparent">AxoDodge</h1>
+                <p class="text-xl mb-8">Esquivez les boules rouges et touchez les bleues avec votre corps!</p>
+                
+                <div class="difficulty-selector mb-6">
+                    <h2 class="text-2xl font-bold mb-4">Choisissez la difficulté:</h2>
+                    <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        <button class="difficulty-btn bg-green-500 hover:bg-green-600 active" data-difficulty="easy">Facile</button>
+                        <button class="difficulty-btn bg-yellow-500 hover:bg-yellow-600" data-difficulty="medium">Moyen</button>
+                        <button class="difficulty-btn bg-red-500 hover:bg-red-600" data-difficulty="hard">Difficile</button>
+                        <button class="difficulty-btn bg-purple-500 hover:bg-purple-600" data-difficulty="progressive">Progressif</button>
+                    </div>
+                </div>
+                
+                <button id="start-game-btn" class="px-8 py-4 text-xl font-bold rounded-full bg-gradient-to-r from-axo-gradient-from to-axo-light text-white transform hover:scale-105 transition-transform">
+                    <i class="fas fa-play mr-2"></i> Commencer
+                </button>
+                
+                <div class="mt-6">
+                    <button id="advanced-settings-btn" class="text-axo-light hover:text-white transition">
+                        <i class="fas fa-cog mr-1"></i> Paramètres avancés
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Écran de jeu -->
+        <div id="game-screen" class="hidden absolute inset-0 z-40">
+            <!-- Canvas de la webcam -->
+            <canvas id="output-canvas" class="absolute inset-0 z-10 w-full h-full"></canvas>
+            
+            <!-- Canvas du jeu -->
+            <canvas id="game-canvas" class="absolute inset-0 z-20 w-full h-full"></canvas>
+            
+            <!-- HUD -->
+<div id="hud" class="absolute inset-0 z-30 pointer-events-none">
+    <!-- Affichage difficulté et timer en haut centre, côte à côte -->
+    <div class="absolute top-4 left-0 right-0 flex justify-center">
+        <div class="flex items-center space-x-4">
+            <div id="difficulty-container" class="bg-black bg-opacity-50 rounded-lg p-2 text-center">
+                <span id="current-difficulty" class="text-xl font-bold">Moyen</span>
+                <span id="level-indicator" class="hidden ml-2 px-2 py-1 rounded bg-purple-500 text-xs">Niv. 1</span>
+            </div>
+            
+            <div id="timer-container" class="bg-black bg-opacity-50 rounded-lg p-2">
+                <span id="timer" class="text-2xl font-bold">00:00</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Autres éléments du HUD (score) -->
+    <div class="flex justify-between items-start p-4">
+        <div id="score-container" class="bg-black bg-opacity-50 rounded-lg p-2 flex items-center">
+            <div class="mr-4">
+                <span class="text-xl font-bold">Score:</span>
+                <span id="score" class="text-2xl font-bold ml-2">0</span>
+            </div>
+            <div id="lives-container">
+                <i class="fas fa-heart text-red-500 text-2xl"></i>
+                <i class="fas fa-heart text-red-500 text-2xl"></i>
+                <i class="fas fa-heart text-red-500 text-2xl"></i>
+            </div>
+        </div>
+        
+        <!-- Timer retiré d'ici car il est maintenant en haut au centre -->
+    </div>
+    
+    <!-- Contrôles -->
+    <div class="absolute top-4 right-4 flex pointer-events-auto">
+        <button id="zen-mode-btn" class="game-control-btn" title="Mode Zen">
+            <i class="fas fa-shield-alt"></i>
+        </button>
+        <button id="pause-btn" class="game-control-btn ml-2" title="Pause">
+            <i class="fas fa-pause"></i>
+        </button>
+        <button id="sound-btn" class="game-control-btn ml-2" title="Son">
+            <i class="fas fa-volume-up"></i>
+        </button>
+    </div>
+    
+    <!-- Barre de progression (mode progressif) -->
+    <div id="progression-container" class="hidden absolute bottom-4 left-4 bg-black bg-opacity-50 rounded-lg p-2">
+        <div class="flex items-center">
+            <span class="text-sm mr-2">Niveau:</span>
+            <div class="w-40 h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div id="level-progress" class="h-full bg-purple-500" style="width: 0%"></div>
+            </div>
+            <span id="next-level-time" class="text-sm ml-2">30s</span>
+        </div>
+    </div>
+    
+    <!-- Compteur de combo -->
+    <div id="combo-container" class="hidden absolute bottom-4 right-4 bg-black bg-opacity-50 rounded-lg p-2">
+        <div class="flex items-center">
+            <span class="text-sm mr-2">Combo:</span>
+            <span id="combo-counter" class="text-xl font-bold">0</span>
+            <span id="combo-multiplier" class="text-sm ml-2">x1.0</span>
+        </div>
+    </div>
+</div>
+            
+            
+            <!-- Notifications -->
+            <div id="notification-area" class="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
+                <!-- Les notifications seront ajoutées ici dynamiquement -->
+            </div>
+            
+            <!-- Contour de positionnement -->
+            <div id="position-outline-container" class="hidden absolute inset-0 z-50 flex items-center justify-center">
+                <div id="position-outline" class="relative">
+                    <div class="absolute top-0 left-0 w-full text-center -mt-16 text-2xl font-bold outline-message">
+                        Positionnez-vous à l'intérieur du cadre
+                    </div>
+                    <div id="position-timer" class="absolute bottom-0 left-0 w-full text-center -mb-16 text-2xl font-bold opacity-0">
+                        <span id="position-seconds">3</span>s
+                    </div>
+                </div>
+            </div>
+            
+        <!-- Compte à rebours initial -->
+            <div id="countdown-container" class="hidden absolute inset-0 z-50 flex items-center justify-center">
+                <div id="countdown" class="text-8xl font-extrabold">3</div>
+            </div>
+        </div>
+        
+        <!-- Écran de pause -->
+        <div id="pause-screen" class="hidden absolute inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center">
+            <div class="bg-axo-dark rounded-xl p-8 max-w-md text-center">
+                <h2 class="text-4xl font-bold mb-6">Jeu en Pause</h2>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <button id="resume-btn" class="pause-button bg-axo-gradient-from hover:bg-blue-700">
+                        <i class="fas fa-play mr-2"></i> Reprendre
+                    </button>
+                    <button id="restart-btn" class="pause-button bg-red-600 hover:bg-red-700">
+                        <i class="fas fa-redo mr-2"></i> Recommencer
+                    </button>
+                </div>
+                
+                <div class="flex flex-col gap-3 mt-4">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input id="zen-mode-toggle" type="checkbox" class="sr-only">
+                        <div class="relative w-11 h-6 bg-gray-600 rounded-full toggle-bg"></div>
+                        <span class="ml-3 text-sm font-medium">Mode Zen</span>
+                    </label>
+                    
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input id="skeleton-toggle" type="checkbox" class="sr-only" checked>
+                        <div class="relative w-11 h-6 bg-gray-600 rounded-full toggle-bg"></div>
+                        <span class="ml-3 text-sm font-medium">Afficher Squellette</span>
+                    </label>
+                    
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input id="video-toggle" type="checkbox" class="sr-only" checked>
+                        <div class="relative w-11 h-6 bg-gray-600 rounded-full toggle-bg"></div>
+                        <span class="ml-3 text-sm font-medium">Afficher Caméra</span>
+                    </label>
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input id="silhouette-toggle" type="checkbox" class="sr-only" checked>
+                        <div class="relative w-11 h-6 bg-gray-600 rounded-full toggle-bg"></div>
+                        <span class="ml-3 text-sm font-medium">Afficher Silhouette</span>
+                    </label>
+                </div>
+                
+                <div class="mt-6">
+                    <button id="pause-advanced-settings-btn" class="text-axo-light hover:text-white transition mr-4">
+                        <i class="fas fa-cog mr-1"></i> Options avancées
+                    </button>
+                    <button id="help-btn" class="text-axo-light hover:text-white transition">
+                        <i class="fas fa-question-circle mr-1"></i> Aide
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Écran Game Over -->
+        <div id="gameover-screen" class="hidden absolute inset-0 z-50 bg-black bg-opacity-80 flex items-center justify-center">
+            <div class="bg-axo-dark rounded-xl p-8 max-w-md">
+                <h2 class="text-4xl font-bold text-center mb-2">Game Over</h2>
+                <div class="mb-6 text-center">
+                    <span class="text-2xl">Score: </span>
+                    <span id="final-score" class="text-3xl font-bold">0</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="stats-item">
+                        <span class="stats-label">Difficulté:</span>
+                        <span id="stats-difficulty" class="stats-value">Moyen</span>
+                    </div>
+                    <div class="stats-item">
+                        <span class="stats-label">Temps:</span>
+                        <span id="stats-time" class="stats-value">00:00</span>
+                    </div>
+                    <div class="stats-item">
+                        <span class="stats-label">Esquives:</span>
+                        <span id="stats-dodges" class="stats-value">0</span>
+                    </div>
+                    <div class="stats-item">
+                        <span class="stats-label">Combo Max:</span>
+                        <span id="stats-max-combo" class="stats-value">0</span>
+                    </div>
+                </div>
+                
+                <div id="zen-mode-info" class="hidden mb-4 text-center p-2 bg-blue-900 bg-opacity-50 rounded-md">
+                    <i class="fas fa-info-circle mr-1"></i> Mode Zen activé
+                </div>
+                
+                <div class="flex justify-center gap-4">
+                    <button id="play-again-btn" class="px-6 py-3 rounded-full bg-axo-gradient-from text-white font-bold hover:bg-blue-700 transition">
+                        <i class="fas fa-redo mr-2"></i> Rejouer
+                    </button>
+                    <button id="share-btn" class="px-6 py-3 rounded-full bg-green-600 text-white font-bold hover:bg-green-700 transition">
+                        <i class="fas fa-share-alt mr-2"></i> Partager
+                    </button>
+                    <button id="gameover-zen-toggle" class="px-6 py-3 rounded-full bg-blue-600 text-white font-bold hover:bg-blue-700 transition">
+                        <i class="fas fa-shield-alt mr-2"></i> Mode Zen
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Écran de paramètres avancés -->
+        <div id="advanced-settings-screen" class="hidden absolute inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center overflow-auto py-8">
+            <div class="bg-axo-dark rounded-xl p-6 max-w-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-bold">Paramètres Avancés</h2>
+                    <button id="close-advanced-settings-btn" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">Difficulté</h3>
+                        <div class="flex flex-col gap-3">
+                            <button class="advanced-difficulty-btn bg-green-500 hover:bg-green-600 active" data-difficulty="easy">Facile</button>
+                            <button class="advanced-difficulty-btn bg-yellow-500 hover:bg-yellow-600" data-difficulty="medium">Moyen</button>
+                            <button class="advanced-difficulty-btn bg-red-500 hover:bg-red-600" data-difficulty="hard">Difficile</button>
+                            <button class="advanced-difficulty-btn bg-purple-500 hover:bg-purple-600" data-difficulty="progressive">Progressif</button>
+                            <button class="advanced-difficulty-btn bg-gray-500 hover:bg-gray-600" data-difficulty="custom">Personnalisé</button>
+                        </div>
+                    </div>
+                    
+                    <div id="custom-settings" class="hidden">
+                        <h3 class="text-xl font-bold mb-4">Paramètres personnalisés</h3>
+                        
+                        <div class="mb-3">
+                            <label class="block text-sm mb-1">Intervalle d'apparition (s)</label>
+                            <input type="range" id="spawn-interval" min="1" max="10" step="0.5" value="5" class="w-full">
+                            <div class="flex justify-between text-xs">
+                                <span>1s</span>
+                                <span id="spawn-interval-value">5.0s</span>
+                                <span>10s</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="block text-sm mb-1">Rayon initial</label>
+                            <input type="range" id="initial-radius" min="5" max="50" step="1" value="20" class="w-full">
+                            <div class="flex justify-between text-xs">
+                                <span>5px</span>
+                                <span id="initial-radius-value">20px</span>
+                                <span>50px</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="block text-sm mb-1">Facteur d'agrandissement</label>
+                            <input type="range" id="growth-factor" min="2" max="15" step="0.5" value="6" class="w-full">
+                            <div class="flex justify-between text-xs">
+                                <span>2x</span>
+                                <span id="growth-factor-value">6.0x</span>
+                                <span>15x</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="block text-sm mb-1">Temps d'avertissement (s)</label>
+                            <input type="range" id="warning-time" min="1" max="6" step="0.1" value="3" class="w-full">
+                            <div class="flex justify-between text-xs">
+                                <span>1s</span>
+                                <span id="warning-time-value">3.0s</span>
+                                <span>6s</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3 flex items-center">
+                            <input type="checkbox" id="progressive-increase" class="mr-2">
+                            <label for="progressive-increase">Augmentation progressive</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end mt-6 gap-3">
+                    <button id="reset-settings-btn" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-700 transition">
+                        <i class="fas fa-undo mr-1"></i> Réinitialiser
+                    </button>
+                    <button id="save-settings-btn" class="px-4 py-2 rounded bg-axo-gradient-from hover:bg-blue-700 transition">
+                        <i class="fas fa-save mr-1"></i> Sauvegarder
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Écran d'aide -->
+        <div id="help-screen" class="hidden absolute inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center overflow-auto py-8">
+            <div class="bg-axo-dark rounded-xl p-6 max-w-3xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-bold">Aide</h2>
+                    <button id="close-help-btn" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">Règles du jeu</h3>
+                        <p>AxoDodge est un jeu interactif en réalité augmentée qui utilise votre webcam pour détecter vos mouvements. Le but est d'esquiver les boules rouges et de toucher les boules bleues avec votre corps.</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-black bg-opacity-30 p-3 rounded-lg">
+                            <h4 class="font-bold text-red-400 mb-1">Boules rouges</h4>
+                            <p class="text-sm">Elles apparaissent d'abord en jaune (avertissement) puis deviennent rouges et grossissent. Vous devez les éviter!</p>
+                            <p class="text-sm mt-1"><span class="font-bold">Si touchées</span>: -2 points, -1 vie</p>
+                            <p class="text-sm"><span class="font-bold">Si évitées</span>: +1 point</p>
+                        </div>
+                        
+                        <div class="bg-black bg-opacity-30 p-3 rounded-lg">
+                            <h4 class="font-bold text-blue-400 mb-1">Boules bleues (bonus)</h4>
+                            <p class="text-sm">Elles apparaissent d'abord en bleu clair puis deviennent bleues. Vous devez les toucher pour gagner des points!</p>
+                            <p class="text-sm mt-1"><span class="font-bold">Si touchées</span>: +1 point</p>
+                            <p class="text-sm"><span class="font-bold">Si manquées</span>: 0 point</p>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">Système de combo</h3>
+                        <p class="mb-2">Chaque esquive consécutive augmente votre compteur de combo. Plus votre combo est élevé, plus vous gagnez de points!</p>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                            <div class="bg-black bg-opacity-30 p-2 rounded-lg text-center">
+                                <span class="font-bold">3+ esquives</span><br>×1.5
+                            </div>
+                            <div class="bg-black bg-opacity-30 p-2 rounded-lg text-center">
+                                <span class="font-bold">5+ esquives</span><br>×2.0
+                            </div>
+                            <div class="bg-black bg-opacity-30 p-2 rounded-lg text-center">
+                                <span class="font-bold">8+ esquives</span><br>×2.5
+                            </div>
+                            <div class="bg-black bg-opacity-30 p-2 rounded-lg text-center">
+                                <span class="font-bold">12+ esquives</span><br>×3.0
+                            </div>
+                            <div class="bg-black bg-opacity-30 p-2 rounded-lg text-center">
+                                <span class="font-bold">20+ esquives</span><br>×4.0
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">Niveaux de difficulté</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-black bg-opacity-30 p-3 rounded-lg">
+                                <h4 class="font-bold text-green-400 mb-1">Facile</h4>
+                                <p class="text-sm">Intervalle: 7.0s</p>
+                                <p class="text-sm">Rayon initial: 15px</p>
+                                <p class="text-sm">Facteur d'agrandissement: 4.0</p>
+                                <p class="text-sm">Temps d'avertissement: 4.0s</p>
+                            </div>
+                            
+                            <div class="bg-black bg-opacity-30 p-3 rounded-lg">
+                                <h4 class="font-bold text-yellow-400 mb-1">Moyen</h4>
+                                <p class="text-sm">Intervalle: 5.0s</p>
+                                <p class="text-sm">Rayon initial: 20px</p>
+                                <p class="text-sm">Facteur d'agrandissement: 6.0</p>
+                                <p class="text-sm">Temps d'avertissement: 3.0s</p>
+                            </div>
+                            
+                            <div class="bg-black bg-opacity-30 p-3 rounded-lg">
+                                <h4 class="font-bold text-red-400 mb-1">Difficile</h4>
+                                <p class="text-sm">Intervalle: 3.0s</p>
+                                <p class="text-sm">Rayon initial: 25px</p>
+                                <p class="text-sm">Facteur d'agrandissement: 8.0</p>
+                                <p class="text-sm">Temps d'avertissement: 2.0s</p>
+                            </div>
+                            
+                            <div class="bg-black bg-opacity-30 p-3 rounded-lg">
+                                <h4 class="font-bold text-purple-400 mb-1">Progressif</h4>
+                                <p class="text-sm">Commence en difficulté Moyenne</p>
+                                <p class="text-sm">Augmente toutes les 30 secondes</p>
+                                <p class="text-sm">Intervalle réduit: -0.5s</p>
+                                <p class="text-sm">Avertissement réduit: -0.3s</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-2">Mode Zen</h3>
+                        <p>Le Mode Zen vous permet de jouer sans perdre de vies. C'est idéal pour s'entraîner ou pour les débutants. Le score est toujours comptabilisé normalement.</p>
+                    </div>
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <button id="back-from-help-btn" class="px-6 py-2 rounded bg-axo-gradient-from hover:bg-blue-700 transition">
+                        <i class="fas fa-arrow-left mr-1"></i> Retour
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Vidéo de la webcam (cachée) -->
+        <video id="video" class="hidden"></video>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="js/sounds.js"></script>
+    <script src="js/poseDetection.js"></script>
+    <script src="js/ball.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
